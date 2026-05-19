@@ -1,25 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { doc, getDoc, collection, query, where, getDocs, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ArrowLeft, User, MapPin, Mail, Phone, Calendar, FileText, Eye } from "lucide-react";
 import Link from "next/link";
 
-export default function ClienteDetalhesPage() {
-  const { id } = useParams();
+function ClienteDetalhesContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
   
   const [cliente, setCliente] = useState<any>(null);
   const [solicitacoes, setSolicitacoes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!id) return;
     const fetchDados = async () => {
       try {
         // 1. Buscar os dados do cliente
-        const docRef = doc(db, "usuarios", id as string);
+        const docRef = doc(db, "usuarios", id);
         const docSnap = await getDoc(docRef);
 
         if (docSnap.exists()) {
@@ -33,7 +35,7 @@ export default function ClienteDetalhesPage() {
         // 2. Buscar todas as solicitações deste cliente
         const q = query(
           collection(db, "solicitacoes"), 
-          where("userId", "==", id as string),
+          where("userId", "==", id),
           orderBy("createdAt", "desc")
         );
         const snapshot = await getDocs(q);
@@ -218,7 +220,7 @@ export default function ClienteDetalhesPage() {
                           </td>
                           <td className="px-6 py-4 text-center">
                             <Link 
-                              href={`/solicitacoes/${solicitacao.id}`}
+                              href={`/solicitacoes/detalhe?id=${solicitacao.id}`}
                               className="text-emerald-600 hover:text-emerald-800 font-medium text-xs bg-emerald-50 p-2 rounded-lg hover:bg-emerald-100 inline-flex items-center gap-1 transition-colors"
                             >
                               <Eye className="w-4 h-4" /> Ver Pedido
@@ -235,5 +237,13 @@ export default function ClienteDetalhesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ClienteDetalhesPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Carregando detalhes do cliente...</div>}>
+      <ClienteDetalhesContent />
+    </Suspense>
   );
 }

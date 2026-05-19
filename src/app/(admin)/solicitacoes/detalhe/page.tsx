@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, query, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { ArrowLeft, User, MapPin, Calendar, Clock, Edit, FileText } from "lucide-react";
 import Link from "next/link";
 
-export default function SolicitacaoDetalhesAdminPage() {
-  const { id } = useParams();
+function SolicitacaoDetalhesContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id");
   
   const [solicitacao, setSolicitacao] = useState<any>(null);
   const [cidadao, setCidadao] = useState<any>(null);
@@ -27,8 +28,9 @@ export default function SolicitacaoDetalhesAdminPage() {
   const [censoBairro, setCensoBairro] = useState("");
 
   const fetchDados = async () => {
+    if (!id) return;
     try {
-      const docRef = doc(db, "solicitacoes", id as string);
+      const docRef = doc(db, "solicitacoes", id);
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
@@ -70,7 +72,7 @@ export default function SolicitacaoDetalhesAdminPage() {
     
     setIsUpdating(true);
     try {
-      const docRef = doc(db, "solicitacoes", id as string);
+      const docRef = doc(db, "solicitacoes", id!);
       
       let historicoDescricao = observacao ? `Status alterado para ${novoStatus}. Observação: ${observacao}` : `Status alterado para ${novoStatus}`;
       const payload: any = { status: novoStatus };
@@ -307,11 +309,29 @@ export default function SolicitacaoDetalhesAdminPage() {
                 <div className="pt-4 border-t border-slate-100">
                   <span className="block text-sm font-medium text-slate-500 mb-2">Fotos Anexadas</span>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
-                    {solicitacao.fotos.map((fotoUrl: string, idx: number) => (
-                      <a key={idx} href={fotoUrl} target="_blank" rel="noopener noreferrer" className="block relative aspect-square rounded-lg overflow-hidden border border-slate-200 hover:border-emerald-500 transition-colors">
-                        <img src={fotoUrl} alt={`Foto Anexo ${idx}`} className="w-full h-full object-cover" />
-                      </a>
-                    ))}
+                    {solicitacao.fotos.map((fotoUrl: string, idx: number) => {
+                      // Helper para garantir que a URL seja HTTPS (evita bloqueio de conteúdo misto)
+                      const getSecureUrl = (url: string) => {
+                        if (url.startsWith("http://")) {
+                          return url.replace("http://", "https://");
+                        }
+                        return url;
+                      };
+
+                      return (
+                        <a key={idx} href={getSecureUrl(fotoUrl)} target="_blank" rel="noopener noreferrer" className="block relative aspect-square rounded-lg overflow-hidden border border-slate-200 hover:border-emerald-500 transition-colors">
+                          <img 
+                            src={getSecureUrl(fotoUrl)} 
+                            alt={`Foto Anexo ${idx}`} 
+                            className="w-full h-full object-cover" 
+                            onError={(e) => {
+                              // Se der erro (ex: link quebrado ou permissão), mostra um placeholder ou esconde
+                              (e.target as HTMLImageElement).src = "https://placehold.co/400x400?text=Erro+na+Imagem";
+                            }}
+                          />
+                        </a>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -513,5 +533,13 @@ export default function SolicitacaoDetalhesAdminPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SolicitacaoDetalhesAdminPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Carregando detalhes...</div>}>
+      <SolicitacaoDetalhesContent />
+    </Suspense>
   );
 }

@@ -108,7 +108,7 @@ export default function ClientesPage() {
                       <td className="px-6 py-4">{dataCadastro}</td>
                       <td className="px-6 py-4 text-center">
                         <Link 
-                          href={`/clientes/${cliente.id}`}
+                          href={`/clientes/detalhe?id=${cliente.id}`}
                           className="text-emerald-600 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 p-2 rounded-lg transition-colors inline-flex items-center gap-1"
                         >
                           <Eye className="w-4 h-4" />
