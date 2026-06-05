@@ -10,6 +10,9 @@ export default function SolicitacoesAdminPage() {
   const [solicitacoes, setSolicitacoes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState("todos");
+  const [filterType, setFilterType] = useState("todos");
+  const [filterRisco, setFilterRisco] = useState("todos");
   const [isGroupedByCep, setIsGroupedByCep] = useState(false);
 
   useEffect(() => {
@@ -30,11 +33,34 @@ export default function SolicitacoesAdminPage() {
     return () => unsubscribe();
   }, []);
 
-  const filteredSolicitacoes = solicitacoes.filter(s => 
-    s.address.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.type.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSolicitacoes = solicitacoes.filter(s => {
+    // 1. Busca textual
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      const addressMatch = (s.address || "").toLowerCase().includes(term);
+      const idMatch = (s.id || "").toLowerCase().includes(term);
+      const typeMatch = (s.type || "").toLowerCase().includes(term);
+      if (!addressMatch && !idMatch && !typeMatch) return false;
+    }
+
+    // 2. Filtro de Status
+    if (filterStatus !== "todos" && s.status !== filterStatus) return false;
+
+    // 3. Filtro de Tipo
+    if (filterType !== "todos") {
+      const typeText = (s.type || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (filterType === "poda" && !typeText.includes("poda")) return false;
+      if (filterType === "supressao" && !typeText.includes("supressao") && !typeText.includes("corte")) return false;
+      if (filterType === "fiscalizacao" && !typeText.includes("fiscalizacao")) return false;
+    }
+
+    // 4. Filtro de Risco
+    const hasRisk = s.risco && s.risco !== "Nenhum risco aparente";
+    if (filterRisco === "com_risco" && !hasRisk) return false;
+    if (filterRisco === "sem_risco" && hasRisk) return false;
+
+    return true;
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -42,8 +68,18 @@ export default function SolicitacoesAdminPage() {
       case "Em Análise": return "bg-orange-100 text-orange-800 border-orange-200";
       case "Aprovado": return "bg-emerald-100 text-emerald-800 border-emerald-200";
       case "Recusado": return "bg-red-100 text-red-800 border-red-200";
+      case "Concluído": return "bg-blue-100 text-blue-800 border-blue-200";
       default: return "bg-slate-100 text-slate-800";
     }
+  };
+
+  const hasActiveFilters = searchTerm !== "" || filterStatus !== "todos" || filterType !== "todos" || filterRisco !== "todos";
+
+  const handleResetFilters = () => {
+    setSearchTerm("");
+    setFilterStatus("todos");
+    setFilterType("todos");
+    setFilterRisco("todos");
   };
 
   return (
@@ -57,25 +93,84 @@ export default function SolicitacoesAdminPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         {/* Toolbar */}
-        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50">
-          <div className="relative w-full sm:max-w-xs">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Buscar endereço, protocolo..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-slate-300 rounded-lg text-sm focus:ring-emerald-500 focus:border-emerald-500 text-slate-900 bg-white"
-            />
+        <div className="p-4 border-b border-slate-200 flex flex-col gap-4 bg-slate-50">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            {/* Campo de Busca */}
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Buscar endereço, protocolo..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 w-full border border-slate-300 rounded-lg text-sm focus:ring-emerald-500 focus:border-emerald-500 text-slate-900 bg-white"
+              />
+            </div>
+            
+            {/* Ações */}
+            <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+              {hasActiveFilters && (
+                <button
+                  onClick={handleResetFilters}
+                  className="px-3 py-2 text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 border border-red-200 rounded-lg transition-colors cursor-pointer"
+                >
+                  Limpar Filtros
+                </button>
+              )}
+              <button 
+                onClick={() => setIsGroupedByCep(!isGroupedByCep)}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors cursor-pointer ${isGroupedByCep ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+              >
+                <Filter className="w-4 h-4" />
+                {isGroupedByCep ? "Desagrupar" : "Agrupar por CEP"}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => setIsGroupedByCep(!isGroupedByCep)}
-              className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium transition-colors ${isGroupedByCep ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}
-            >
-              <Filter className="w-4 h-4" />
-              {isGroupedByCep ? "Desagrupar" : "Agrupar por CEP"}
-            </button>
+
+          {/* Filtros Dropdowns */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200/60">
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Status</label>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-700 bg-white focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                <option value="todos">Todos os Status</option>
+                <option value="Criado">Criado (Aguardando)</option>
+                <option value="Em Análise">Em Análise (Vistoria)</option>
+                <option value="Aprovado">Aprovado</option>
+                <option value="Concluído">Concluído</option>
+                <option value="Recusado">Recusado</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Serviço</label>
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-700 bg-white focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                <option value="todos">Todos os Serviços</option>
+                <option value="poda">Poda</option>
+                <option value="supressao">Supressão (Corte)</option>
+                <option value="fiscalizacao">Fiscalização</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Risco Iminente</label>
+              <select
+                value={filterRisco}
+                onChange={(e) => setFilterRisco(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-700 bg-white focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                <option value="todos">Todos os Riscos</option>
+                <option value="com_risco">🚨 Apenas com Risco</option>
+                <option value="sem_risco">Sem Risco Aparente</option>
+              </select>
+            </div>
           </div>
         </div>
 

@@ -6,6 +6,8 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 
+import { useToast } from "@/context/ToastContext";
+
 interface AuthContextType {
   user: User | null;
   adminData: any | null;
@@ -21,6 +23,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [role, setRole] = useState<"master" | "admin" | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { showToast } = useToast();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -42,7 +45,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setAdminData(null);
             setRole(null);
             setUser(null);
-            alert("Acesso negado. Apenas administradores podem acessar este painel.");
+            showToast("Acesso negado. Apenas administradores podem acessar este painel.", "erro");
             router.push("/login");
           }
         } catch (error) {

@@ -6,11 +6,14 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { ShieldCheck } from "lucide-react";
 
+import { useToast } from "@/context/ToastContext";
+
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const { showToast } = useToast();
 
   const efetuarLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +24,7 @@ export default function AdminLoginPage() {
         router.push("/");
       } catch (error: any) {
         console.error("Erro ao fazer login admin:", error);
-        alert("Acesso negado. Verifique suas credenciais de administrador.");
+        showToast("Acesso negado. Verifique suas credenciais de administrador.", "erro");
       } finally {
         setIsLoading(false);
       }
