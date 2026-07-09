@@ -67,6 +67,7 @@ export default function SolicitacoesAdminPage() {
       case "Criado": return "bg-slate-100 text-slate-800 border-slate-200";
       case "Em Análise": return "bg-orange-100 text-orange-800 border-orange-200";
       case "Aprovado": return "bg-emerald-100 text-emerald-800 border-emerald-200";
+      case "Aguardando Validação": return "bg-purple-100 text-purple-800 border-purple-200";
       case "Recusado": return "bg-red-100 text-red-800 border-red-200";
       case "Concluído": return "bg-blue-100 text-blue-800 border-blue-200";
       default: return "bg-slate-100 text-slate-800";
@@ -140,6 +141,7 @@ export default function SolicitacoesAdminPage() {
                 <option value="Criado">Criado (Aguardando)</option>
                 <option value="Em Análise">Em Análise (Vistoria)</option>
                 <option value="Aprovado">Aprovado</option>
+                <option value="Aguardando Validação">Aguardando Validação (Corte Feito)</option>
                 <option value="Concluído">Concluído</option>
                 <option value="Recusado">Recusado</option>
               </select>

@@ -62,6 +62,9 @@ function SolicitacaoDetalhesContent() {
   const [prazoDias, setPrazoDias] = useState("");
   const [tecnicos, setTecnicos] = useState<any[]>([]);
   const [selectedTecnico, setSelectedTecnico] = useState("");
+  const [statusVal, setStatusVal] = useState("");
+  const [observacaoVal, setObservacaoVal] = useState("");
+  const [concederCertificado, setConcederCertificado] = useState(true);
   
 
 
@@ -178,7 +181,13 @@ function SolicitacaoDetalhesContent() {
       
       let historicoDescricao = observacao ? `Status alterado para ${novoStatus}. Observação: ${observacao}` : `Status alterado para ${novoStatus}`;
       
-      if (novoStatus === "Aprovado" && selectedPrestador) {
+      if (solicitacao.status === "Aguardando Validação") {
+        if (novoStatus === "Concluído") {
+          historicoDescricao = `Execução homologada pelo administrador. Chamado concluído com sucesso. ${observacao ? 'Observação: ' + observacao : ''}`;
+        } else if (novoStatus === "Aprovado") {
+          historicoDescricao = `Fotos de comprovação rejeitadas pelo administrador. Retornado para o status Aprovado para correções do cidadão. ${observacao ? 'Motivo/Observação: ' + observacao : ''}`;
+        }
+      } else if (novoStatus === "Aprovado" && selectedPrestador) {
         const prestadorObj = prestadores.find(p => p.id === selectedPrestador);
         if (prestadorObj) {
           payload.prestadorId = prestadorObj.id;
@@ -204,6 +213,46 @@ function SolicitacaoDetalhesContent() {
     } catch (e) {
       console.error(e);
       showToast("Erro ao atualizar status.", "erro");
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleValidadePoda = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!statusVal) return;
+
+    setIsUpdating(true);
+    try {
+      const docRef = doc(db, "solicitacoes", id!);
+      const payload: any = { status: statusVal };
+      
+      let historicoDescricao = "";
+      if (statusVal === "Concluído") {
+        historicoDescricao = `Poda homologada e aprovada pelo administrador. Chamado concluído com sucesso. Observações: ${observacaoVal || "Tudo em conformidade."}`;
+        payload.concederCertificado = concederCertificado;
+        payload.dataFinalizacao = new Date().toLocaleDateString('pt-BR');
+      } else if (statusVal === "Aprovado") {
+        historicoDescricao = `A COMPROVAÇÃO DA PODA FOI REPROVADA. Erros cometidos / Parecer: ${observacaoVal || "Fotos de comprovação insatisfatórias ou execução em desacordo com as orientações técnicas."}\n\n⚠️ ALERTA IMPORTANTE: A execução inadequada ou incorreta da poda/supressão sem a observância das exigências técnicas pode acarretar na aplicação de multa ambiental municipal de acordo com a legislação vigente. Se houver qualquer dúvida de como proceder para regularizar, acesse o chat de suporte da plataforma para tirá-las diretamente com a Secretaria de Meio Ambiente.`;
+      }
+
+      const historicoEntry = {
+        data: new Date().toLocaleDateString('pt-BR'),
+        status: statusVal,
+        descricao: historicoDescricao
+      };
+
+      payload.historico = arrayUnion(historicoEntry);
+
+      await updateDoc(docRef, payload);
+
+      showToast(statusVal === "Concluído" ? "Poda homologada com sucesso!" : "Comprovação reprovada e cidadão notificado.", "sucesso");
+      setObservacaoVal("");
+      setStatusVal("");
+      fetchDados();
+    } catch (err) {
+      console.error("Erro ao validar poda:", err);
+      showToast("Erro ao enviar validação.", "erro");
     } finally {
       setIsUpdating(false);
     }
@@ -263,6 +312,7 @@ function SolicitacaoDetalhesContent() {
       case "Criado": return "bg-slate-100 text-slate-800 border-slate-200";
       case "Em Análise": return "bg-orange-100 text-orange-800 border-orange-200";
       case "Aprovado": return "bg-emerald-100 text-emerald-800 border-emerald-200";
+      case "Aguardando Validação": return "bg-purple-100 text-purple-800 border-purple-200";
       case "Recusado": return "bg-red-100 text-red-800 border-red-200";
       case "Concluído": return "bg-blue-100 text-blue-800 border-blue-200";
       default: return "bg-slate-100 text-slate-800 border-slate-200";
@@ -293,7 +343,7 @@ function SolicitacaoDetalhesContent() {
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Protocolo</span>
               <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
-              <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">#{solicitacao.id.substring(0, 8).toUpperCase()}</span>
+              <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">#{/^\d{14}$/.test(solicitacao.id) ? solicitacao.id : solicitacao.id.substring(0, 8).toUpperCase()}</span>
             </div>
             <h1 className="text-2xl font-black text-slate-800 mt-1">{solicitacao.type || "Solicitação"}</h1>
           </div>
@@ -311,18 +361,18 @@ function SolicitacaoDetalhesContent() {
               target="_blank" 
               rel="noopener noreferrer"
               className="px-3.5 py-1.5 rounded-xl text-xs font-bold border bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200/50 flex items-center gap-1.5 transition-colors shadow-sm"
-              title="Visualizar documento de anuência do proprietário"
+              title="Visualizar documento de anuência ou contrato de locação"
             >
               <FileText className="w-3.5 h-3.5 shrink-0" />
-              <span>Ver Anuência</span>
+              <span>Ver Anuência/Contrato</span>
             </a>
           ) : (
             solicitacao.imovelAlugado && (
               <span 
                 className="px-3.5 py-1.5 rounded-xl text-xs font-bold border bg-rose-50 text-rose-700 border-rose-200 flex items-center gap-1 transition-colors shadow-sm"
-                title="Imóvel alugado, mas o documento de anuência não foi anexado."
+                title="Imóvel alugado, mas a anuência ou contrato não foram anexados."
               >
-                ⚠️ Sem Doc. Anuência
+                ⚠️ Sem Anuência/Contrato
               </span>
             )
           )}
@@ -377,6 +427,23 @@ function SolicitacaoDetalhesContent() {
         >
           <Edit className="w-4.5 h-4.5" />
           <span>Ação do Servidor</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("validacao")}
+          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold text-sm transition-all duration-200 cursor-pointer relative ${
+            activeTab === "validacao"
+              ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/10"
+              : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          <Camera className="w-4.5 h-4.5" />
+          <span>Validar Poda</span>
+          {solicitacao.status === "Aguardando Validação" && (
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-purple-600"></span>
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveTab("historico")}
@@ -462,6 +529,18 @@ function SolicitacaoDetalhesContent() {
                         {dataCriacaoFormatada}
                       </span>
                     </div>
+                    {(solicitacao.qtdPodaSolicitada !== undefined || solicitacao.qtdSupressaoSolicitada !== undefined) && (
+                      <>
+                        <div>
+                          <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Qtd. Árvores para Poda</span>
+                          <span className="text-slate-800 font-extrabold text-sm">{solicitacao.qtdPodaSolicitada ?? 0}</span>
+                        </div>
+                        <div>
+                          <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Qtd. Árvores para Supressão</span>
+                          <span className="text-slate-800 font-extrabold text-sm">{solicitacao.qtdSupressaoSolicitada ?? 0}</span>
+                        </div>
+                      </>
+                    )}
                     {solicitacao.prazoDias && solicitacao.prazoDias !== "Não definido" && (
                       <div>
                         <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Prazo Técnico</span>
@@ -550,7 +629,7 @@ function SolicitacaoDetalhesContent() {
                     </div>
                   )}
 
-                  {/* Documento de Anuência do Proprietário */}
+                  {/* Documento de Anuência / Contrato */}
                   {solicitacao.documentoAnuencia && (
                     <div className="pt-5 border-t border-slate-100 space-y-3">
                       <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Documentos do Solicitante</span>
@@ -560,7 +639,7 @@ function SolicitacaoDetalhesContent() {
                             <FileText className="w-6 h-6" />
                           </div>
                           <div className="min-w-0">
-                            <p className="font-bold text-slate-800 text-sm truncate">Autorização / Anuência do Proprietário</p>
+                            <p className="font-bold text-slate-800 text-sm truncate">Autorização de Anuência / Contrato de Locação</p>
                             <p className="text-xs text-slate-400 mt-0.5 font-medium">
                               {solicitacao.documentoAnuencia.toLowerCase().includes(".pdf") || solicitacao.documentoAnuencia.toLowerCase().split('?')[0].endsWith(".pdf")
                                 ? "Documento formato PDF" 
@@ -593,7 +672,7 @@ function SolicitacaoDetalhesContent() {
                           
                           <a 
                             href={getSecureUrl(solicitacao.documentoAnuencia)} 
-                            download={`Anuencia_Protocolo_${solicitacao.id.substring(0, 8)}.pdf`}
+                            download={`Anuencia_Protocolo_${/^\d{14}$/.test(solicitacao.id) ? solicitacao.id : solicitacao.id.substring(0, 8)}.pdf`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-sm transition-all cursor-pointer"
@@ -601,6 +680,90 @@ function SolicitacaoDetalhesContent() {
                             <Download className="w-3.5 h-3.5 shrink-0" />
                             Baixar
                           </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Documento de Anuência do Vizinho */}
+                  {solicitacao.arvoreNaDivisa && solicitacao.documentoVizinho && (
+                    <div className="pt-5 border-t border-slate-100 space-y-3">
+                      <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Anuência do Vizinho (Divisa)</span>
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-50 border border-slate-200/80 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl border border-emerald-100/50 shrink-0">
+                            <FileText className="w-6 h-6" />
+                          </div>
+                          <div className="min-w-0 font-sans">
+                            <p className="font-bold text-slate-800 text-sm truncate">Acordo de Divisa e Reposição</p>
+                            <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                              Reposição acordada em: <span className="font-bold text-slate-700">{solicitacao.localReposicao || "Não especificado"}</span>
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto justify-end">
+                          {solicitacao.documentoVizinho.toLowerCase().includes(".pdf") || solicitacao.documentoVizinho.toLowerCase().split('?')[0].endsWith(".pdf") ? (
+                            <a 
+                              href={getSecureUrl(solicitacao.documentoVizinho)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 shadow-sm transition-all"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Visualizar PDF
+                            </a>
+                          ) : (
+                            <button 
+                              type="button"
+                              onClick={() => setSelectedImage(getSecureUrl(solicitacao.documentoVizinho))}
+                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-emerald-700 font-bold rounded-xl text-xs border border-slate-200 shadow-sm transition-all cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              Visualizar Foto
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Laudo de Caracterização Ambiental */}
+                  {solicitacao.documentoCaracterizacao && (
+                    <div className="pt-5 border-t border-slate-100 space-y-3">
+                      <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Laudo de Caracterização Ambiental</span>
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 font-sans">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="p-3 bg-amber-100 text-amber-800 rounded-xl border border-amber-200/50 shrink-0">
+                            <FileText className="w-6 h-6" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 text-sm truncate">Laudo de Caracterização Ambiental obrigatório (&gt; 15 supressões)</p>
+                            <p className="text-xs text-slate-500 mt-0.5 font-medium">Documento técnico exigido legalmente</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto justify-end">
+                          {solicitacao.documentoCaracterizacao.toLowerCase().includes(".pdf") || solicitacao.documentoCaracterizacao.toLowerCase().split('?')[0].endsWith(".pdf") ? (
+                            <a 
+                              href={getSecureUrl(solicitacao.documentoCaracterizacao)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white hover:bg-amber-100 text-slate-700 font-bold rounded-xl text-xs border border-slate-200 shadow-sm transition-all"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Visualizar PDF
+                            </a>
+                          ) : (
+                            <button 
+                              type="button"
+                              onClick={() => setSelectedImage(getSecureUrl(solicitacao.documentoCaracterizacao))}
+                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-white hover:bg-amber-100 text-amber-850 font-bold rounded-xl text-xs border border-slate-200 shadow-sm transition-all cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              Visualizar Foto
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -652,12 +815,14 @@ function SolicitacaoDetalhesContent() {
 
                         const autorLabels = {
                           usuario: "Cidadão",
+                          usuario_corte: "Comprovação de Poda",
                           tecnico: "Técnico",
                           admin: "Administrador"
                         };
 
                         const autorColors = {
                           usuario: "bg-blue-50 text-blue-700 border-blue-100",
+                          usuario_corte: "bg-purple-50 text-purple-700 border-purple-100",
                           tecnico: "bg-orange-50 text-orange-700 border-orange-100",
                           admin: "bg-emerald-50 text-emerald-700 border-emerald-100"
                         };
@@ -731,7 +896,22 @@ function SolicitacaoDetalhesContent() {
                   </h3>
                 </div>
                 <div className="p-6 text-sm space-y-5">
-                  {cidadao ? (
+                  {solicitacao.anonima ? (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+                        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold shrink-0">
+                          🤫
+                        </div>
+                        <div className="truncate">
+                          <p className="font-bold text-slate-800 truncate">Denúncia Anônima</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Identidade Preservada</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                        O cidadão optou por registrar esta infração de forma anônima. Suas informações de contato foram ocultadas para preservar sua privacidade na Ouvidoria Pública.
+                      </p>
+                    </div>
+                  ) : cidadao ? (
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
                         <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold shrink-0">
@@ -833,11 +1013,11 @@ function SolicitacaoDetalhesContent() {
                     </div>
                     <div>
                       <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Registro Profissional</span>
-                      <span className="text-slate-850 font-semibold text-sm">{solicitacao.laudoTecnico.registroProfissional}</span>
+                      <span className="text-slate-800 font-semibold text-sm">{solicitacao.laudoTecnico.registroProfissional}</span>
                     </div>
                     <div>
                       <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Assinatura / ART-CREA</span>
-                      <span className="text-slate-850 font-semibold text-xs italic">{solicitacao.laudoTecnico.assinaturaCrea}</span>
+                      <span className="text-slate-800 font-semibold text-xs italic">{solicitacao.laudoTecnico.assinaturaCrea}</span>
                     </div>
                     <div>
                       <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Data da Vistoria</span>
@@ -885,75 +1065,439 @@ function SolicitacaoDetalhesContent() {
                     );
                   })()}
 
-                  {/* Características da Árvore */}
-                  <div className="space-y-3 pb-6 border-b border-slate-100">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Características do Espécime</h4>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <span className="block text-[10px] font-bold text-slate-400 uppercase">Espécie</span>
-                        <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.especie || "Não informada"}</span>
-                      </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <span className="block text-[10px] font-bold text-slate-400 uppercase">DAP (Diâmetro)</span>
-                        <span className="text-slate-800 font-extrabold text-xs">{solicitacao.laudoTecnico.dap ? `${solicitacao.laudoTecnico.dap} cm` : "N/A"}</span>
-                      </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <span className="block text-[10px] font-bold text-slate-400 uppercase">Altura Estimada</span>
-                        <span className="text-slate-800 font-extrabold text-xs">{solicitacao.laudoTecnico.altura ? `${solicitacao.laudoTecnico.altura} m` : "N/A"}</span>
-                      </div>
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                        <span className="block text-[10px] font-bold text-slate-400 uppercase">Inclinação</span>
-                        <span className="text-slate-800 font-extrabold text-xs">{solicitacao.laudoTecnico.inclinacao !== undefined ? `${solicitacao.laudoTecnico.inclinacao}°` : "N/A"}</span>
+                  {/* Dados Gerais da Vistoria */}
+                  {solicitacao.laudoTecnico.autorizacaoPara && (
+                    <div className="space-y-3 pb-6 border-b border-slate-100 font-sans">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        Dados Gerais da Vistoria ({solicitacao.laudoTecnico.formType === "privado" ? "Área Privada / Inst." : "Área Pública"})
+                      </h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase">Autorização para</span>
+                          <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.autorizacaoPara}</span>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase">Tipo de Imóvel</span>
+                          <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.tipoImovel || "N/A"}</span>
+                        </div>
+
+                        {solicitacao.laudoTecnico.formType === "privado" ? (
+                          <>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Requerente</span>
+                              <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.requerenteTipo || "Requerente"}</span>
+                            </div>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 col-span-1 sm:col-span-2">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Nome do Requerente</span>
+                              <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.requerenteNome || "N/A"}</span>
+                            </div>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Telefone</span>
+                              <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.requerenteFone || "N/A"}</span>
+                            </div>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Local da Intervenção</span>
+                              <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.localIntervencao || "N/A"}</span>
+                            </div>
+                            {solicitacao.laudoTecnico.podaDrasticaQtd && (
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase">Qtd. Árvores Poda Drástica</span>
+                                <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.podaDrasticaQtd}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase">Responsável</span>
+                            <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.secretariaResponsavel || "N/A"}</span>
+                          </div>
+                        )}
+
+                        {(solicitacao.laudoTecnico.qtdSupressao > 0 || solicitacao.laudoTecnico.qtdPoda > 0) && (
+                          <>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Qtd. Supressões Autorizadas</span>
+                              <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.qtdSupressao || 0}</span>
+                            </div>
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              <span className="block text-[10px] font-bold text-slate-400 uppercase">Qtd. Podas Autorizadas</span>
+                              <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.qtdPoda || 0}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Questionário Fitossanitário */}
-                  <div className="space-y-3 pb-6 border-b border-slate-100">
-                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avaliação Fitossanitária e de Riscos</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                      <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                        <span className="font-semibold text-slate-700">Fiação elétrica próxima ou em conflito:</span>
-                        <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.fiacaoProxima ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
-                          {solicitacao.laudoTecnico.fiacaoProxima ? "Sim" : "Não"}
-                        </span>
+                  {/* Características da Árvore e Avaliações */}
+                  {solicitacao.laudoTecnico.arvores && solicitacao.laudoTecnico.arvores.length > 0 ? (
+                    <div className="space-y-6 pb-6 border-b border-slate-100">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Laudo por Espécime ({solicitacao.laudoTecnico.arvores.length})</h4>
+                      <div className="space-y-5">
+                        {solicitacao.laudoTecnico.arvores.map((tree: any, idx: number) => (
+                          <div key={tree.id || idx} className="bg-slate-50/50 p-4.5 rounded-2xl border border-slate-200 space-y-4 font-sans text-xs">
+                            <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                              <span className="font-extrabold text-slate-800 uppercase tracking-wider text-xs">{tree.identificador || `Árvore ${idx + 1}`}</span>
+                              <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${
+                                tree.decisaoFinal?.includes("Supressão") 
+                                  ? "bg-red-50 text-red-700 border-red-200"
+                                  : tree.decisaoFinal?.includes("Poda")
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-slate-100 text-slate-700 border-slate-200"
+                              }`}>
+                                {tree.decisaoFinal || "Sem recomendação"}
+                              </span>
+                            </div>
+
+                            {/* Características Dendrométricas */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                              <div className="bg-white p-2.5 rounded-xl border border-slate-150">
+                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Espécie</span>
+                                <span className="text-slate-800 font-bold text-xs">{tree.especie || "Não informada"}</span>
+                              </div>
+                              <div className="bg-white p-2.5 rounded-xl border border-slate-150">
+                                <span className="block text-[9px] font-bold text-slate-400 uppercase">DAP (Diâmetro)</span>
+                                <span className="text-slate-800 font-extrabold text-xs">{tree.dap ? `${tree.dap} cm` : "N/A"}</span>
+                              </div>
+                              <div className="bg-white p-2.5 rounded-xl border border-slate-150">
+                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Altura</span>
+                                <span className="text-slate-800 font-extrabold text-xs">{tree.altura ? `${tree.altura} m` : "N/A"}</span>
+                              </div>
+                              <div className="bg-white p-2.5 rounded-xl border border-slate-150">
+                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Inclinação / Risco</span>
+                                <span className="text-slate-800 font-extrabold text-xs">
+                                  {tree.inclinacao !== undefined ? `${tree.inclinacao}°` : "0°"} / {tree.grauRisco || "Baixo"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Questionário Fitossanitário */}
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                              <span className="block font-bold text-slate-500 uppercase text-[9px] mb-2.5 text-emerald-800 tracking-wider">Avaliação Fitossanitária e Conflitos</span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-slate-650 font-medium">
+                                <div className="flex justify-between items-center">
+                                  <span>Fiação elétrica próxima:</span>
+                                  <span className={`px-2 py-0.5 rounded font-black border text-[9px] ${tree.fiacaoProxima ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{tree.fiacaoProxima ? "Sim" : "Não"}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span>Danos estruturais:</span>
+                                  <span className={`px-2 py-0.5 rounded font-black border text-[9px] ${tree.danosEstruturais ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{tree.danosEstruturais ? "Sim" : "Não"}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span>Presença de pragas/cupins:</span>
+                                  <span className={`px-2 py-0.5 rounded font-black border text-[9px] ${tree.pragasCupins ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{tree.pragasCupins ? "Sim" : "Não"}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span>Tronco oco/podridão:</span>
+                                  <span className={`px-2 py-0.5 rounded font-black border text-[9px] ${tree.troncoOco ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{tree.troncoOco ? "Sim" : "Não"}</span>
+                                </div>
+                                <div className="flex justify-between items-center sm:col-span-2 pt-1 border-t border-slate-100 mt-1">
+                                  <span>Árvore morta / declínio severo:</span>
+                                  <span className={`px-2 py-0.5 rounded font-black border text-[9px] ${tree.arvoreMorta ? "bg-red-50 text-red-700 border-red-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>{tree.arvoreMorta ? "Sim" : "Não"}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Critérios Fitossanitários Detalhados */}
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-4 text-slate-600">
+                              <div className="space-y-1.5">
+                                <span className="font-bold text-slate-400 block uppercase text-[9px] tracking-wider">Incompatibilidades</span>
+                                {tree.incompatibilidadeCalcada && <div className="text-[10px] text-red-700 font-semibold">❌ Estragos na calçada</div>}
+                                {tree.incompatibilidadeEsgotoAgua && <div className="text-[10px] text-red-700 font-semibold">❌ Rede de esgoto/água</div>}
+                                {tree.incompatibilidadeDanosConstrucao && <div className="text-[10px] text-red-700 font-semibold">❌ Danos na construção</div>}
+                                {tree.incompatibilidadePassagemPedestres && <div className="text-[10px] text-red-700 font-semibold">❌ Obstáculo a pedestres</div>}
+                                {tree.incompatibilidadePorteEspecie && <div className="text-[10px] text-red-700 font-semibold">❌ Porte ou toxicidade inadequada</div>}
+                                {!tree.incompatibilidadeCalcada && !tree.incompatibilidadeEsgotoAgua && !tree.incompatibilidadeDanosConstrucao && !tree.incompatibilidadePassagemPedestres && !tree.incompatibilidadePorteEspecie && <div className="text-[10px] text-slate-400 italic">Nenhuma incompatibilidade</div>}
+                              </div>
+
+                              <div className="space-y-1.5 border-t sm:border-t-0 sm:border-l border-slate-100 pt-3 sm:pt-0 sm:pl-4">
+                                <span className="font-bold text-slate-400 block uppercase text-[9px] tracking-wider">Estado Fitossanitário, Obras & Emergências</span>
+                                {tree.fitossanitarioParasitas && <div className="text-[10px] text-amber-700 font-semibold">⚠️ Plantas parasitas</div>}
+                                {tree.fitossanitarioApodrecimento && <div className="text-[10px] text-red-705 font-semibold">⚠️ Apodrecimento devido a doenças</div>}
+                                {tree.fitossanitarioSenescente && <div className="text-[10px] text-amber-707 font-semibold">⚠️ Senescente / debilitada por podas</div>}
+                                {tree.obrasImplantacao && <div className="text-[10px] text-slate-650 font-semibold">👷 Implantação de obras</div>}
+                                {tree.obrasVeiculos && <div className="text-[10px] text-slate-650 font-semibold">🚗 Entrada/saída de veículos</div>}
+                                {tree.emergenciaRiscoPop && <div className="text-[10px] text-red-800 font-black">🚨 Risco à vida/patrimônio</div>}
+                                {tree.emergenciaGalhosCaindo && <div className="text-[10px] text-red-800 font-black">🚨 Galhos/árvores caindo</div>}
+                                {!tree.fitossanitarioParasitas && !tree.fitossanitarioApodrecimento && !tree.fitossanitarioSenescente && !tree.obrasImplantacao && !tree.obrasVeiculos && !tree.emergenciaRiscoPop && !tree.emergenciaGalhosCaindo && <div className="text-[10px] text-slate-400 italic">Nenhum estado crítico ou emergência</div>}
+                              </div>
+                            </div>
+
+                            {/* Especificações de Poda */}
+                            {(tree.podaFormacaoConducao || tree.podaLimpeza || tree.podaAdequacao || tree.podaEmergencial || tree.podaLevantamentoCopa) && (
+                              <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2">
+                                <span className="font-bold text-slate-500 block uppercase text-[9px] text-emerald-800 tracking-wider">Especificações de Intervenção</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-slate-600 font-semibold">
+                                  {tree.podaFormacaoConducao && <div><strong>Formação/Condução:</strong> {tree.podaFormacaoConducao}</div>}
+                                  {tree.podaLimpeza && <div><strong>Limpeza:</strong> {tree.podaLimpeza}</div>}
+                                  {tree.podaAdequacao && <div><strong>Adequação:</strong> {tree.podaAdequacao}</div>}
+                                  {tree.podaEmergencial && <div><strong>Emergencial:</strong> {tree.podaEmergencial}</div>}
+                                  {tree.podaLevantamentoCopa && <div className="sm:col-span-2"><strong>Levantamento de Copa:</strong> {tree.podaLevantamentoCopa}</div>}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Parecer Específico */}
+                            <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                              <span className="font-bold text-slate-400 block uppercase text-[9px] mb-1">Parecer Individual da Árvore</span>
+                              <p className="text-slate-700 font-semibold leading-relaxed whitespace-pre-wrap">{tree.parecerTecnico || "Sem parecer específico."}</p>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                        <span className="font-semibold text-slate-700">Danos estruturais (muros/calçada/rede):</span>
-                        <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.danosEstruturais ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
-                          {solicitacao.laudoTecnico.danosEstruturais ? "Sim" : "Não"}
-                        </span>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Características da Árvore */}
+                      <div className="space-y-3 pb-6 border-b border-slate-100">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Características do Espécime</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase">Espécie</span>
+                            <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.especie || "Não informada"}</span>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase">DAP (Diâmetro)</span>
+                            <span className="text-slate-800 font-extrabold text-xs">{solicitacao.laudoTecnico.dap ? `${solicitacao.laudoTecnico.dap} cm` : "N/A"}</span>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase">Altura Estimada</span>
+                            <span className="text-slate-800 font-extrabold text-xs">{solicitacao.laudoTecnico.altura ? `${solicitacao.laudoTecnico.altura} m` : "N/A"}</span>
+                          </div>
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                            <span className="block text-[10px] font-bold text-slate-400 uppercase">Inclinação</span>
+                            <span className="text-slate-800 font-extrabold text-xs">{solicitacao.laudoTecnico.inclinacao !== undefined ? `${solicitacao.laudoTecnico.inclinacao}°` : "N/A"}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                        <span className="font-semibold text-slate-700">Infestação de pragas ou cupins ativos:</span>
-                        <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.pragasCupins ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
-                          {solicitacao.laudoTecnico.pragasCupins ? "Sim" : "Não"}
-                        </span>
+
+                      {/* Especificações dos Tipos de Poda */}
+                      {(solicitacao.laudoTecnico.podaFormacaoConducao || 
+                        solicitacao.laudoTecnico.podaLimpeza || 
+                        solicitacao.laudoTecnico.podaAdequacao || 
+                        solicitacao.laudoTecnico.podaEmergencial || 
+                        solicitacao.laudoTecnico.podaLevantamentoCopa) && (
+                        <div className="space-y-3 pb-6 border-b border-slate-100 font-sans">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Especificações dos Tipos de Poda</h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            {solicitacao.laudoTecnico.podaFormacaoConducao && (
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
+                                <span className="font-semibold text-slate-500">Formação / Condução:</span>
+                                <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.podaFormacaoConducao}</span>
+                              </div>
+                            )}
+                            {solicitacao.laudoTecnico.podaLimpeza && (
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
+                                <span className="font-semibold text-slate-500">Limpeza:</span>
+                                <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.podaLimpeza}</span>
+                              </div>
+                            )}
+                            {solicitacao.laudoTecnico.podaAdequacao && (
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
+                                <span className="font-semibold text-slate-500">Adequação:</span>
+                                <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.podaAdequacao}</span>
+                              </div>
+                            )}
+                            {solicitacao.laudoTecnico.podaEmergencial && (
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
+                                <span className="font-semibold text-slate-500">Emergencial:</span>
+                                <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.podaEmergencial}</span>
+                              </div>
+                            )}
+                            {solicitacao.laudoTecnico.podaLevantamentoCopa && (
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center col-span-1 sm:col-span-2">
+                                <span className="font-semibold text-slate-500">Levantamento de Copa:</span>
+                                <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.podaLevantamentoCopa}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Questionário Fitossanitário */}
+                      <div className="space-y-3 pb-6 border-b border-slate-100">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Avaliação Fitossanitária e de Riscos</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                            <span className="font-semibold text-slate-700">Fiação elétrica próxima ou em conflito:</span>
+                            <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.fiacaoProxima ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
+                              {solicitacao.laudoTecnico.fiacaoProxima ? "Sim" : "Não"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                            <span className="font-semibold text-slate-700">Danos estruturais (muros/calçada/rede):</span>
+                            <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.danosEstruturais ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
+                              {solicitacao.laudoTecnico.danosEstruturais ? "Sim" : "Não"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                            <span className="font-semibold text-slate-700">Infestação de pragas ou cupins ativos:</span>
+                            <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.pragasCupins ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
+                              {solicitacao.laudoTecnico.pragasCupins ? "Sim" : "Não"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                            <span className="font-semibold text-slate-700">Tronco oco, cavidades ou podridão interna:</span>
+                            <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.troncoOco ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
+                              {solicitacao.laudoTecnico.troncoOco ? "Sim" : "Não"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                            <span className="font-semibold text-slate-700">Árvore morta ou em declínio biológico severo:</span>
+                            <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.arvoreMorta ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
+                              {solicitacao.laudoTecnico.arvoreMorta ? "Sim" : "Não"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                            <span className="font-semibold text-slate-700">Grau de Risco de Queda Avaliado:</span>
+                            <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${
+                              solicitacao.laudoTecnico.grauRisco === "Alto" || solicitacao.laudoTecnico.grauRisco === "Iminente"
+                                ? "bg-red-50 text-red-750 border-red-250"
+                                : solicitacao.laudoTecnico.grauRisco === "Médio"
+                                ? "bg-orange-50 text-orange-700 border-orange-250"
+                                : "bg-slate-100 text-slate-700 border-slate-200"
+                            }`}>
+                              {solicitacao.laudoTecnico.grauRisco || "Baixo"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                        <span className="font-semibold text-slate-700">Tronco oco, cavidades ou podridão interna:</span>
-                        <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.troncoOco ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
-                          {solicitacao.laudoTecnico.troncoOco ? "Sim" : "Não"}
-                        </span>
+
+                      {/* Critérios Paisagísticos, Ecológicos, Fitossanitários e de Risco Detalhados */}
+                      <div className="space-y-3 pb-6 border-b border-slate-100 font-sans">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Critérios e Pareceres de Risco Detalhados</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs text-slate-600">
+                          {/* Incompatibilidade */}
+                          <div className="space-y-2">
+                            <span className="font-bold text-slate-500 block uppercase text-[10px]">1 - Incompatibilidades</span>
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span>Calçada com estragos irreparáveis:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.incompatibilidadeCalcada ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.incompatibilidadeCalcada ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Rede de esgoto e/ou água afetada:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.incompatibilidadeEsgotoAgua ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.incompatibilidadeEsgotoAgua ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Danos na estrutura da construção:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.incompatibilidadeDanosConstrucao ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.incompatibilidadeDanosConstrucao ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Restrição na passagem de pedestres:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.incompatibilidadePassagemPedestres ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.incompatibilidadePassagemPedestres ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Porte/espécie inadequado ou tóxico:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.incompatibilidadePorteEspecie ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.incompatibilidadePorteEspecie ? "Sim" : "Não"}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Estado Fitossanitário */}
+                          <div className="space-y-2">
+                            <span className="font-bold text-slate-500 block uppercase text-[10px]">2 - Estado Fitossanitário</span>
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span>Pragas irremediáveis:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.pragasCupins ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.pragasCupins ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Atacada por plantas parasitas:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.fitossanitarioParasitas ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.fitossanitarioParasitas ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Apodrecimento devido a doenças:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.fitossanitarioApodrecimento ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.fitossanitarioApodrecimento ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Debilitada por podas/senescente:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.fitossanitarioSenescente ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.fitossanitarioSenescente ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Árvore morta:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.arvoreMorta ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.arvoreMorta ? "Sim" : "Não"}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Obras */}
+                          <div className="space-y-2">
+                            <span className="font-bold text-slate-500 block uppercase text-[10px]">3 - Obras</span>
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span>Implantação de obras/projetos:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.obrasImplantacao ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.obrasImplantacao ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Entrada e saída de veículos:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.obrasVeiculos ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.obrasVeiculos ? "Sim" : "Não"}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Emergência */}
+                          <div className="space-y-2">
+                            <span className="font-bold text-slate-500 block uppercase text-[10px]">4 - Emergência</span>
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span>Risco iminente à população/patrimônio:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.emergenciaRiscoPop ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.emergenciaRiscoPop ? "Sim" : "Não"}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span>Galhos ou árvores caindo/caída:</span>
+                                <span className={`font-bold ${solicitacao.laudoTecnico.emergenciaGalhosCaindo ? "text-red-700" : "text-slate-400"}`}>{solicitacao.laudoTecnico.emergenciaGalhosCaindo ? "Sim" : "Não"}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                        <span className="font-semibold text-slate-700">Árvore morta ou em declínio biológico severo:</span>
-                        <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${solicitacao.laudoTecnico.arvoreMorta ? "bg-red-50 text-red-700 border-red-250" : "bg-emerald-50 text-emerald-700 border-emerald-250"}`}>
-                          {solicitacao.laudoTecnico.arvoreMorta ? "Sim" : "Não"}
-                        </span>
+                    </>
+                  )}
+
+                  {/* Plano de Substituição / Plantio */}
+                  {(solicitacao.laudoTecnico.supressaoQtdSubstituicao > 0 || 
+                    solicitacao.laudoTecnico.substituicaoQtd > 0 || 
+                    solicitacao.laudoTecnico.substituicaoPorte) && (
+                    <div className="space-y-3 pb-6 border-b border-slate-100 font-sans">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Plano de Substituição / Plantio</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase">Qtd. Árvores Suprimidas</span>
+                          <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.supressaoQtdSubstituicao || 0}</span>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase">Qtd. Mudas para Substituição</span>
+                          <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.substituicaoQtd || 0}</span>
+                        </div>
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase">Porte Recomendado</span>
+                          <span className="text-slate-800 font-bold text-xs">{solicitacao.laudoTecnico.substituicaoPorte || "Não especificado"}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                        <span className="font-semibold text-slate-700">Grau de Risco de Queda Avaliado:</span>
-                        <span className={`px-2.5 py-0.5 rounded font-black border text-[10px] ${
-                          solicitacao.laudoTecnico.grauRisco === "Alto" || solicitacao.laudoTecnico.grauRisco === "Iminente"
-                            ? "bg-red-50 text-red-750 border-red-250"
-                            : solicitacao.laudoTecnico.grauRisco === "Médio"
-                            ? "bg-orange-50 text-orange-700 border-orange-250"
-                            : "bg-slate-100 text-slate-700 border-slate-200"
-                        }`}>
-                          {solicitacao.laudoTecnico.grauRisco || "Baixo"}
-                        </span>
-                      </div>
+                    </div>
+                  )}
+
+                  {/* Outras Observações de Campo */}
+                  <div className="space-y-3 pb-6 border-b border-slate-100 font-sans">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outras Observações de Campo</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                      {solicitacao.laudoTecnico.obsArvoreVizinho && <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-700 font-semibold border border-slate-200">🌳 Árvore de vizinho</span>}
+                      {solicitacao.laudoTecnico.obsArvoreDivisa && <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-700 font-semibold border border-slate-200">🌳 Árvore na divisa</span>}
+                      {solicitacao.laudoTecnico.obsAbelhasComFerrao && <span className="px-2.5 py-1 rounded bg-red-50 text-red-750 font-semibold border border-red-200">🐝 Abelhas com ferrão</span>}
+                      {solicitacao.laudoTecnico.obsAbelhasSemFerrao && <span className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">🐝 Abelhas sem ferrão</span>}
+                      {solicitacao.laudoTecnico.obsNinhoAguardar && <span className="px-2.5 py-1 rounded bg-amber-50 text-amber-700 font-semibold border border-amber-200">🪺 Ninho (aguardar desocupação)</span>}
+                      {solicitacao.laudoTecnico.obsAumentarRecorteCalcada && <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-700 font-semibold border border-slate-200">📐 Aumentar recorte da calçada</span>}
+                      {solicitacao.laudoTecnico.obsEnderecoIncompleto && <span className="px-2.5 py-1 rounded bg-orange-50 text-orange-700 font-semibold border border-orange-200">📍 Endereço incompleto</span>}
+                      {solicitacao.laudoTecnico.obsEnderecoErrado && <span className="px-2.5 py-1 rounded bg-orange-50 text-orange-700 font-semibold border border-orange-200">📍 Endereço errado</span>}
+                      {solicitacao.laudoTecnico.obsEnderecoNaoEncontrado && <span className="px-2.5 py-1 rounded bg-orange-50 text-orange-700 font-semibold border border-orange-200">📍 Endereço não encontrado</span>}
+                      {solicitacao.laudoTecnico.obsPodaDrastica && (
+                         <span className="px-2.5 py-1 rounded bg-red-50 text-red-755 font-semibold border border-red-200">
+                           ⚠️ Poda drástica de árvores
+                           {solicitacao.laudoTecnico.podaDrasticaQtd ? ` (Qtd: ${solicitacao.laudoTecnico.podaDrasticaQtd})` : ""}
+                         </span>
+                       )}
+                      {solicitacao.laudoTecnico.obsAguardarFlorescimento && <span className="px-2.5 py-1 rounded bg-amber-50 text-amber-700 font-semibold border border-amber-200">🌸 Aguardar floração</span>}
                     </div>
                   </div>
 
@@ -974,10 +1518,30 @@ function SolicitacaoDetalhesContent() {
                     </div>
 
                     {solicitacao.laudoTecnico.compensacaoAmbiental && (
-                      <div className="space-y-1.5">
+                      <div className="space-y-1.5 font-sans">
                         <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Compensação Ambiental Recomendada</span>
                         <div className="bg-emerald-50/30 p-4 rounded-xl text-emerald-800 border border-emerald-100 text-xs font-bold leading-relaxed">
                           🌱 {solicitacao.laudoTecnico.compensacaoAmbiental}
+                        </div>
+                      </div>
+                    )}
+
+                    {solicitacao.laudoTecnico.materialComplementarAnexo !== undefined && (
+                      <div className="space-y-1.5 font-sans">
+                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Material Complementar Anexo?</span>
+                        <span className="text-slate-800 font-semibold text-xs bg-slate-50 border border-slate-200 px-2.5 py-1 rounded inline-block">
+                          {solicitacao.laudoTecnico.materialComplementarAnexo ? "Sim" : "Não"}
+                        </span>
+                      </div>
+                    )}
+
+                    {(solicitacao.laudoTecnico.observacoesGerais || solicitacao.laudoTecnico.anotacoesCampo) && (
+                      <div className="space-y-1.5 font-sans">
+                        <span className="block text-xs font-bold text-slate-400 uppercase tracking-wider">
+                          {solicitacao.laudoTecnico.formType === "privado" ? "Anotações de Campo" : "Observações Gerais do Laudo"}
+                        </span>
+                        <div className="bg-slate-50 p-4 rounded-xl text-slate-700 border border-slate-100 text-xs leading-relaxed whitespace-pre-wrap font-medium">
+                          {solicitacao.laudoTecnico.formType === "privado" ? solicitacao.laudoTecnico.anotacoesCampo : solicitacao.laudoTecnico.observacoesGerais}
                         </div>
                       </div>
                     )}
@@ -1030,11 +1594,11 @@ function SolicitacaoDetalhesContent() {
                   </select>
                 </div>
 
-                {!solicitacao.laudoTecnico && (
+                {solicitacao.status !== "Aguardando Validação" && !solicitacao.laudoTecnico && (
                   <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex gap-3 text-amber-900 text-xs">
                     <Info className="w-5 h-5 flex-shrink-0 text-amber-600 mt-0.5" />
                     <div>
-                      <h4 className="font-extrabold text-amber-950">Aprovação Bloqueada (Requer Laudo Técnico)</h4>
+                      <h4 className="font-extrabold text-amber-955">Aprovação Bloqueada (Requer Laudo Técnico)</h4>
                       <p className="mt-1 leading-relaxed font-semibold">
                         Esta solicitação ainda não possui um **Laudo Técnico** emitido pelo vistoriador. 
                         A aprovação só é habilitada após a realização da vistoria de campo. 
@@ -1096,6 +1660,133 @@ function SolicitacaoDetalhesContent() {
                   className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 rounded-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {isUpdating ? "Salvando..." : "Salvar Atualização"}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Validar Poda */}
+        {activeTab === "validacao" && (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 max-w-4xl mx-auto overflow-hidden animate-fadeIn">
+            <div className="p-5 border-b border-slate-100 bg-emerald-50/40 flex items-center gap-2">
+              <Camera className="w-5 h-5 text-emerald-700" />
+              <h3 className="font-extrabold text-emerald-800 text-md">
+                Validação de Poda (Foto pós-poda)
+              </h3>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {(() => {
+                const fotosComprovacao = solicitacao.fotos?.filter((f: any) => typeof f === "object" && f !== null && f.autor === "usuario_corte") || [];
+                if (fotosComprovacao.length === 0) {
+                  return (
+                    <div className="text-center py-12 flex flex-col items-center justify-center">
+                      <div className="text-4xl mb-3">🕒</div>
+                      <h4 className="text-base font-extrabold text-slate-800">Aguardando Fotos de Comprovação</h4>
+                      <p className="text-xs text-slate-500 max-w-sm mt-2 leading-relaxed">
+                        O cidadão ainda não anexou as fotos pós-poda para comprovação da execução do serviço.
+                      </p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="space-y-3 pb-6 border-b border-slate-100">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Fotos pós-poda enviadas pelo Cidadão</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {fotosComprovacao.map((fotoItem: any, idx: number) => {
+                        const secureUrl = getSecureUrl(fotoItem.url);
+                        return (
+                          <div key={idx} className="relative group border border-slate-200 rounded-2xl overflow-hidden bg-slate-50 flex flex-col justify-between shadow-sm">
+                            <div 
+                              onClick={() => setSelectedImage(secureUrl)}
+                              className="cursor-pointer relative aspect-square overflow-hidden bg-slate-200 flex items-center justify-center border-b border-slate-200/50"
+                            >
+                              <img 
+                                src={secureUrl} 
+                                alt={`Foto Comprovação ${idx}`} 
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "https://placehold.co/400x400?text=Imagem+Indispon%C3%ADvel";
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-black/35 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center text-white">
+                                <span className="bg-black/50 px-3 py-1.5 rounded-xl text-xs font-bold backdrop-blur-sm">Ampliar</span>
+                              </div>
+                            </div>
+                            <div className="p-2 bg-slate-50 text-[10px] text-slate-500 flex justify-between font-bold">
+                              <span>Foto pós-corte #{idx + 1}</span>
+                              {fotoItem.data && <span>{fotoItem.data}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <form onSubmit={handleValidadePoda} className="space-y-6">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Decisão de Homologação</label>
+                  <select 
+                    value={statusVal}
+                    onChange={(e) => setStatusVal(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-700 bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm font-semibold"
+                  >
+                    <option value="">-- Selecione a Ação --</option>
+                    <option value="Concluído">Homologar Execução (Concluir Chamado)</option>
+                    <option value="Aprovado">Reprovar Poda (Solicitar Correção / Rejeitar Foto)</option>
+                  </select>
+                </div>
+
+                {statusVal === "Concluído" && (
+                  <div className="bg-emerald-50 border border-emerald-150 p-4 rounded-xl flex items-start gap-3 mt-4 animate-fadeIn">
+                    <input 
+                      type="checkbox" 
+                      id="check-conceder-certificado" 
+                      checked={concederCertificado} 
+                      onChange={e => setConcederCertificado(e.target.checked)} 
+                      className="mt-1 w-5 h-5 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500/20 cursor-pointer shrink-0" 
+                    />
+                    <label htmlFor="check-conceder-certificado" className="text-xs sm:text-sm text-emerald-955 font-bold cursor-pointer select-none leading-relaxed">
+                      Conceder Certificado de Agradecimento Ambiental ao Cidadão
+                      <span className="block text-[10px] text-slate-500 font-medium mt-0.5">
+                        Selecione se a poda foi realizada em conformidade com as orientações ambientais, permitindo ao cidadão acessar seu Selo Verde.
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-400 tracking-wider mb-2">Descrição dos Erros Cometidos / Observação Técnica</label>
+                  <textarea 
+                    rows={4}
+                    value={observacaoVal}
+                    onChange={(e) => setObservacaoVal(e.target.value)}
+                    placeholder="Se a poda for reprovada, descreva detalhadamente os erros cometidos para notificar o cidadão..."
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-sm leading-relaxed"
+                  ></textarea>
+                </div>
+
+                {/* Caixa de Aviso de Multa e Chat */}
+                <div className="bg-red-50/80 border border-red-200 p-4 rounded-xl flex gap-3 text-red-900 text-xs">
+                  <AlertTriangle className="w-5 h-5 flex-shrink-0 text-red-650 mt-0.5 animate-pulse" />
+                  <div>
+                    <h4 className="font-extrabold text-red-955">Aviso Importante e Penalidades</h4>
+                    <p className="mt-1 leading-relaxed font-semibold">
+                      O cidadão será notificado sobre essa decisão de homologação. Ao reprovar a poda, o sistema sempre incluirá um aviso formal de que a execução incorreta ou em desconformidade pode resultar em **multas por infração ambiental** municipal. Também orientará o cidadão a entrar em contato pelo **chat de suporte** para sanar dúvidas.
+                    </p>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={isUpdating || !statusVal}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 rounded-xl shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {isUpdating ? "Enviando..." : "Enviar Decisão de Homologação"}
                 </button>
               </form>
             </div>

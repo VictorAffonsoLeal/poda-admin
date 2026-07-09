@@ -341,7 +341,7 @@ function ClienteDetalhesContent() {
                       <div className="space-y-1.5">
                         <div className="flex items-center gap-2.5">
                           <span className="font-mono text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors">
-                            #{solicitacao.id.substring(0, 8)}
+                            #{/^\d{14}$/.test(solicitacao.id) ? solicitacao.id : solicitacao.id.substring(0, 8)}
                           </span>
                           <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${getStatusColor(solicitacao.status)}`}>
                             {solicitacao.status}

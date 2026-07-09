@@ -4,10 +4,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { LayoutDashboard, FileText, Users, LogOut, Menu, Briefcase, MessageCircle, X, Award, Shield, ChevronLeft, ChevronRight, HardHat } from "lucide-react";
+import { LayoutDashboard, FileText, Users, LogOut, Menu, Briefcase, MessageCircle, X, Award, Shield, ChevronLeft, ChevronRight, HardHat, AlertTriangle, HeartHandshake } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { collection, onSnapshot, query } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -15,6 +15,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const pathname = usePathname();
   const [totalNaoLidos, setTotalNaoLidos] = useState(0);
+  const [totalFeedbacksNovos, setTotalFeedbacksNovos] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -43,6 +44,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => unsub();
   }, [user]);
 
+  // Contador de feedbacks novos
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, "feedbacks"), where("status", "==", "Novo"));
+    const unsub = onSnapshot(q, (snap) => {
+      setTotalFeedbacksNovos(snap.size);
+    }, () => {});
+    return () => unsub();
+  }, [user]);
+
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -64,9 +75,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navItems = [
     { name: "Painel Geral", href: "/", icon: LayoutDashboard },
     { name: "Solicitações", href: "/solicitacoes", icon: FileText },
+    { name: "Denúncias", href: "/denuncias", icon: AlertTriangle },
     { name: "Clientes", href: "/clientes", icon: Users },
     { name: "Prestadores", href: "/prestadores", icon: Briefcase },
     { name: "Atendimentos", href: "/atendimentos", icon: MessageCircle, badge: totalNaoLidos },
+    { name: "Feedbacks", href: "/feedbacks", icon: HeartHandshake, badge: totalFeedbacksNovos },
   ];
 
   if (role === "master") {

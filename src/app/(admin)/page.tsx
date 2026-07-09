@@ -142,7 +142,7 @@ export default function AdminDashboard() {
     let riscoCritico = 0;
 
     filteredData.forEach((item) => {
-      if (item.status === "Criado" || item.status === "Em Análise") {
+      if (item.status === "Criado" || item.status === "Em Análise" || item.status === "Aguardando Validação") {
         aguardando++;
       }
       if (item.status === "Concluído") {
@@ -239,6 +239,7 @@ export default function AdminDashboard() {
       Criado: 0,
       "Em Análise": 0,
       Aprovado: 0,
+      "Aguardando Validação": 0,
       Recusado: 0,
       Concluído: 0,
     };
@@ -254,6 +255,7 @@ export default function AdminDashboard() {
       Criado: "#64748b",      // slate-500
       "Em Análise": "#f97316", // orange-500
       Aprovado: "#10b981",     // emerald-500
+      "Aguardando Validação": "#8b5cf6", // violet-500
       Recusado: "#ef4444",     // red-500
       Concluído: "#3b82f6",    // blue-500
     };
@@ -262,6 +264,7 @@ export default function AdminDashboard() {
       Criado: "Aguardando",
       "Em Análise": "Em Vistoria",
       Aprovado: "Aprovado",
+      "Aguardando Validação": "Comprovado",
       Recusado: "Recusado",
       Concluído: "Concluído",
     };
@@ -494,6 +497,7 @@ export default function AdminDashboard() {
               <option value="Criado">Criado (Aguardando)</option>
               <option value="Em Análise">Em Análise (Vistoria)</option>
               <option value="Aprovado">Aprovado</option>
+              <option value="Aguardando Validação">Aguardando Validação (Corte Feito)</option>
               <option value="Concluído">Concluído</option>
               <option value="Recusado">Recusado</option>
             </select>
@@ -942,7 +946,7 @@ export default function AdminDashboard() {
                   return (
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-6 py-4">
-                        <span className="font-extrabold text-slate-700">#{item.id.substring(0, 8)}</span>
+                        <span className="font-extrabold text-slate-700">#{/^\d{14}$/.test(item.id) ? item.id : item.id.substring(0, 8)}</span>
                         <div className="text-[10px] text-slate-400 mt-0.5">{date}</div>
                       </td>
                       <td className="px-6 py-4">
